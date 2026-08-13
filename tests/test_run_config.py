@@ -76,11 +76,48 @@ def test_feature_columns_inside_user_option_values_rejected(tmp_path: Path):
         load_model_configuration(yaml_path)
 
 
-def test_unknown_field_at_wrapper_level_rejected(tmp_path: Path):
-    yaml_path = tmp_path / "bad.yaml"
+def test_unknown_field_at_wrapper_level_ignored(tmp_path: Path):
+    """chap dumps the whole ConfiguredModelDB row, so the wrapper must tolerate
+    bookkeeping keys it does not care about rather than failing the run."""
+    yaml_path = tmp_path / "extra.yaml"
     yaml_path.write_text(yaml.safe_dump({"not_a_real_field": 1}))
-    with pytest.raises(Exception):
-        load_model_configuration(yaml_path)
+    assert load_model_configuration(yaml_path) == ChapModelConfiguration()
+
+
+def test_configured_model_db_dump_round_trips(tmp_path: Path):
+    """The real shape chap writes: ModelConfiguration fields + ConfiguredModelDB
+    columns + the prediction_length chap injects."""
+    yaml_path = tmp_path / "model_configuration_for_run.yaml"
+    yaml_path.write_text(
+        yaml.safe_dump(
+            {
+                "additional_continuous_covariates": ["rainfall", "mean_temperature"],
+                "user_option_values": {"n_target_lags": 4},
+                # ConfiguredModelDB columns
+                "name": "simple_multistep_example:minimal_variables_config",
+                "id": 16,
+                "model_template_id": 14,
+                "archived": False,
+                "uses_chapkit": False,
+                # injected by chap_core.runners.helper_functions
+                "prediction_length": 3,
+            }
+        )
+    )
+
+    model_cfg = load_model_configuration(yaml_path)
+    assert model_cfg.additional_continuous_covariates == ["rainfall", "mean_temperature"]
+    assert model_cfg.user_option_values.n_target_lags == 4
+    assert model_cfg.prediction_length == 3
+
+
+def test_null_columns_fall_back_to_defaults(tmp_path: Path):
+    """A configured model with NULL json columns dumps as `null`, not `{}`."""
+    yaml_path = tmp_path / "nulls.yaml"
+    yaml_path.write_text(
+        yaml.safe_dump({"user_option_values": None, "additional_continuous_covariates": None})
+    )
+    assert load_model_configuration(yaml_path) == ChapModelConfiguration()
 
 
 def test_unknown_field_inside_user_option_values_rejected(tmp_path: Path):

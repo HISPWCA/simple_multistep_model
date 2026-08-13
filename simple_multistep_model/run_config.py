@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ProbWrapper = Literal["bucketedresidual", "bootstrap", "cross-conformal"]
 
@@ -84,10 +84,22 @@ class ChapModelConfiguration(BaseModel):
     ``chap_core.database.model_templates_and_config_tables.ModelConfiguration``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     additional_continuous_covariates: list[str] = Field(default_factory=list)
     user_option_values: RunConfig = Field(default_factory=RunConfig)
+
+    prediction_length: int | None = Field(default=None)
+
+    @field_validator("additional_continuous_covariates", mode="before")
+    @classmethod
+    def _null_covariates_means_none(cls, v):
+        return [] if v is None else v
+
+    @field_validator("user_option_values", mode="before")
+    @classmethod
+    def _null_options_means_defaults(cls, v):
+        return {} if v is None else v
 
 
 def load_model_configuration(path: str | Path) -> ChapModelConfiguration:
